@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { AuditExport, ConsentAnalytics, IncidentRegister, Overview, RequestQueue, RetentionMonitor, Settings } from "./screens";
 
 const SCREENS = [
@@ -15,6 +15,24 @@ const SCREENS = [
 function fromHash(): string {
   const id = window.location.hash.replace(/^#\/?/, "");
   return SCREENS.some((s) => s.id === id) ? id : SCREENS[0].id;
+}
+
+// One screen failing to render must not take the navigation and the other screens with it.
+class ScreenBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <p role="alert">
+        This screen could not be displayed. The backend may be a different version from this dashboard.
+      </p>
+    );
+  }
 }
 
 export function App() {
@@ -39,7 +57,9 @@ export function App() {
           ))}
         </ul>
       </nav>
-      <View />
+      <ScreenBoundary key={current}>
+        <View />
+      </ScreenBoundary>
     </main>
   );
 }

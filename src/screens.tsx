@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { api, DEFAULT_API_BASE, getApiBase, setApiBase, type DsrRequest } from "./api";
+import { api, defaultApiBase, getApiBase, setApiBase, type RequestUpdate, type RightsRequest } from "./api";
 import { useLoad, type Loaded } from "./useLoad";
 
 function Status<T>({ state, children }: { state: Loaded<T>; children: (data: T) => ReactNode }) {
@@ -25,10 +25,6 @@ export function slaLabel(dueAt: string, now = Date.now()): string {
   return days === 0 ? "due today" : `${days}d left`;
 }
 
-export function isOverdue(r: DsrRequest, now = Date.now()): boolean {
-  return r.status !== "closed" && new Date(r.due_at).getTime() < now;
-}
-
 export function Overview() {
   const requests = useLoad(api.requests);
   const retention = useLoad(api.retention);
@@ -38,16 +34,16 @@ export function Overview() {
       <Status state={requests}>
         {(rs) => (
           <ul>
-            <li>Open requests: {rs.filter((r) => r.status !== "closed").length}</li>
-            <li>Overdue requests: {rs.filter((r) => isOverdue(r)).length}</li>
+            <li>Open requests: {rs.filter((r) => !r.closed_at).length}</li>
+            <li>Overdue requests: {rs.filter((r) => r.overdue).length}</li>
           </ul>
         )}
       </Status>
       <Status state={retention}>
-        {(items) => (
+        {(r) => (
           <ul>
-            <li>Upcoming erasures: {items.filter((i) => i.action === "erasure").length}</li>
-            <li>Needs attention: {items.filter((i) => i.action === "needs_attention").length}</li>
+            <li>Upcoming erasures: {r.items.filter((i) => i.action === "erase").length}</li>
+            <li>Needs attention: {r.needs_attention.length}</li>
           </ul>
         )}
       </Status>
@@ -55,12 +51,63 @@ export function Overview() {
   );
 }
 
+function RequestActions({ request, onUpdate }: { request: RightsRequest; onUpdate: (u: RequestUpdate) => void }) {
+  const [assignee, setAssignee] = useState("");
+  const [message, setMessage] = useState("");
+  const awaitingStart = request.status === "received" || request.status === "identity_pending";
+  return (
+    <details>
+      <summary>Manage {request.id}</summary>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onUpdate({ action: "assign", assignee: assignee.trim() });
+        }}
+      >
+        <label>
+          Assign to <input required value={assignee} onChange={(e) => setAssignee(e.target.value)} />
+        </label>{" "}
+        <button type="submit">Assign</button>
+      </form>
+      {awaitingStart && (
+        <p>
+          <button type="button" onClick={() => onUpdate({ action: "start" })}>
+            Start
+          </button>{" "}
+          <button type="button" onClick={() => onUpdate({ action: "verify_identity", verified: true })}>
+            Identity verified
+          </button>{" "}
+          <button type="button" onClick={() => onUpdate({ action: "verify_identity", verified: false })}>
+            Identity not verified (rejects)
+          </button>
+        </p>
+      )}
+      <label>
+        Response or rejection reason
+        <br />
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+      </label>
+      {request.kind === "erasure" && (
+        <p>Responding to an erasure request erases this person's data, except anything under a legal hold.</p>
+      )}
+      <p>
+        <button type="button" disabled={!message.trim()} onClick={() => onUpdate({ action: "respond", message })}>
+          Respond and complete
+        </button>{" "}
+        <button type="button" disabled={!message.trim()} onClick={() => onUpdate({ action: "reject", message })}>
+          Reject
+        </button>
+      </p>
+    </details>
+  );
+}
+
 export function RequestQueue() {
   const state = useLoad(api.requests);
   const [actionError, setActionError] = useState<string | null>(null);
-  const close = async (id: string) => {
+  const update = async (id: string, change: RequestUpdate) => {
     try {
-      await api.closeRequest(id);
+      await api.updateRequest(id, change);
       setActionError(null);
       state.reload();
     } catch (e) {
@@ -77,6 +124,7 @@ export function RequestQueue() {
             <thead>
               <tr>
                 <th scope="col">Request</th>
+                <th scope="col">Principal</th>
                 <th scope="col">Type</th>
                 <th scope="col">Status</th>
                 <th scope="col">Assignee</th>
@@ -88,17 +136,12 @@ export function RequestQueue() {
               {rs.map((r) => (
                 <tr key={r.id}>
                   <td>{r.id}</td>
-                  <td>{r.type}</td>
-                  <td>{r.status}</td>
+                  <td>{r.principal}</td>
+                  <td>{r.kind}</td>
+                  <td>{r.status.replace("_", " ")}</td>
                   <td>{r.assignee ?? "unassigned"}</td>
-                  <td>{r.status === "closed" ? "—" : slaLabel(r.due_at)}</td>
-                  <td>
-                    {r.status !== "closed" && (
-                      <button type="button" onClick={() => close(r.id)}>
-                        Close {r.id}
-                      </button>
-                    )}
-                  </td>
+                  <td>{r.closed_at ? "—" : slaLabel(r.due_at)}</td>
+                  <td>{!r.closed_at && <RequestActions request={r} onUpdate={(u) => update(r.id, u)} />}</td>
                 </tr>
               ))}
             </tbody>
@@ -122,6 +165,7 @@ export function ConsentAnalytics() {
                 <th scope="col">Purpose</th>
                 <th scope="col">Notice version</th>
                 <th scope="col">Grants</th>
+                <th scope="col">Denials</th>
                 <th scope="col">Withdrawals</th>
               </tr>
             </thead>
@@ -129,8 +173,9 @@ export function ConsentAnalytics() {
               {rows.map((s) => (
                 <tr key={`${s.purpose}@${s.notice_version}`}>
                   <td>{s.purpose}</td>
-                  <td>{s.notice_version}</td>
+                  <td>{s.notice_version ?? "—"}</td>
                   <td>{s.grants}</td>
+                  <td>{s.denials}</td>
                   <td>{s.withdrawals}</td>
                 </tr>
               ))}
@@ -148,25 +193,59 @@ export function RetentionMonitor() {
     <section aria-labelledby="h-retention">
       <h2 id="h-retention">Retention monitor</h2>
       <Status state={state}>
-        {(items) => (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Subject</th>
-                <th scope="col">Action</th>
-                <th scope="col">Scheduled</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.subject}</td>
-                  <td>{i.action.replace("_", " ")}</td>
-                  <td>{i.scheduled_at.slice(0, 10)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {(r) => (
+          <>
+            <h3>Upcoming warnings and erasures</h3>
+            {r.items.length === 0 ? (
+              <p>Nothing scheduled in the next 7 days.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Principal</th>
+                    <th scope="col">Purpose</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Scheduled</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.items.map((i) => (
+                    <tr key={`${i.schedule_id}:${i.action}`}>
+                      <td>{i.principal}</td>
+                      <td>{i.purpose}</td>
+                      <td>{i.action === "erase" ? "erasure" : "warning"}</td>
+                      <td>{i.at.slice(0, 10)}</td>
+                      <td>{i.status.replace("_", " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <h3>Needs attention</h3>
+            {r.needs_attention.length === 0 ? (
+              <p>Nothing needs attention.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Principal</th>
+                    <th scope="col">Purpose</th>
+                    <th scope="col">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.needs_attention.map((a) => (
+                    <tr key={a.schedule_id}>
+                      <td>{a.principal}</td>
+                      <td>{a.purpose}</td>
+                      <td>{a.reason ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </Status>
     </section>
@@ -288,19 +367,34 @@ export function AuditExport() {
       setResult(
         v.ok
           ? `Ledger verified: ${v.checked} entries intact.`
-          : `Ledger broken at entry ${v.first_bad_index} of ${v.checked}.`,
+          : `Ledger check failed at row ${v.failed_row ?? "unknown"} after ${v.checked} entries: ${v.reason ?? "no reason given"}.`,
       );
     } catch (e) {
       setResult(`Verification failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  // Fetched rather than linked: a plain link would save an error response (say, a missing role) as the download.
+  const download = async () => {
+    try {
+      const { name, blob } = await api.auditExport();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+      URL.revokeObjectURL(url);
+      setResult(`Downloaded ${name}.`);
+    } catch (e) {
+      setResult(`Download failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
   return (
     <section aria-labelledby="h-audit">
       <h2 id="h-audit">Audit export</h2>
       <p>
-        <a href={api.auditExportUrl()} download>
+        <button type="button" onClick={download}>
           Download evidence pack
-        </a>
+        </button>
       </p>
       <button type="button" onClick={verify}>
         Verify ledger
@@ -311,11 +405,48 @@ export function AuditExport() {
 }
 
 export function Settings() {
+  const notice = useLoad(api.notice);
   const [base, setBase] = useState(getApiBase());
   const [saved, setSaved] = useState(false);
   return (
     <section aria-labelledby="h-settings">
       <h2 id="h-settings">Settings</h2>
+      <h3>Current notice and purposes</h3>
+      <p>These come from your dpdpkit configuration and are read-only here.</p>
+      <Status state={notice}>
+        {(n) => (
+          <>
+            <ul>
+              <li>Title: {n.title}</li>
+              <li>Version: {n.version}</li>
+              <li>Published: {n.published_at.slice(0, 10)}</li>
+              <li>Languages: {n.available_locales.join(", ")}</li>
+              <li>Content hash: {n.content_hash}</li>
+            </ul>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Purpose</th>
+                  <th scope="col">Legal basis</th>
+                  <th scope="col">Required</th>
+                  <th scope="col">Data items</th>
+                </tr>
+              </thead>
+              <tbody>
+                {n.purposes.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.title}</td>
+                    <td>{p.legal_basis.replace("_", " ")}</td>
+                    <td>{p.required ? "yes" : "no"}</td>
+                    <td>{p.data_items.join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </Status>
+      <h3>Connection</h3>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -327,7 +458,7 @@ export function Settings() {
           API base path{" "}
           <input
             value={base}
-            placeholder={DEFAULT_API_BASE}
+            placeholder={defaultApiBase()}
             onChange={(e) => {
               setBase(e.target.value);
               setSaved(false);

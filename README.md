@@ -15,28 +15,26 @@ npm ci
 npm run dev        # Vite dev server
 npm test           # unit tests
 npm run build      # type-check, then static files in dist/
+npm run e2e        # every screen against the fastapi_shop example, using the installed Chrome
 ```
 
-`dist/` is plain static files with relative asset URLs, so any adapter can serve it from its own mount path
-(for example `/dpdp/admin/`).
+`npm run e2e` expects a dpdpkit-fastapi checkout at `../dpdpkit-fastapi` (or `DPDPKIT_FASTAPI_DIR`) and a Python
+with it installed in `DPDPKIT_PYTHON`.
+
+`dist/` is plain static files with relative asset URLs. The adapters serve it at `<prefix>/admin/ui/` and the
+dashboard takes its API base from that path, so `/dpdp/admin/ui/` calls `/dpdp`. Change it under Settings if your
+API is elsewhere.
 
 ## Consume the bundle
 
 Each `vX.Y.Z` tag publishes `dpdpkit-admin-X.Y.Z.tar.gz` (with a `.sha256` file) on the GitHub release. The
-archive root is the bundle itself (`index.html` at the top level). The fastapi, django and server builds
-download the asset at the release version and extract it into their static directory:
-
-```bash
-v=0.4.0
-base=https://github.com/dpdpkit-dev/dpdpkit-admin/releases/download/v$v
-curl -fsSLO $base/dpdpkit-admin-$v.tar.gz -O $base/dpdpkit-admin-$v.tar.gz.sha256
-sha256sum -c dpdpkit-admin-$v.tar.gz.sha256
-mkdir -p <static dir> && tar -xzf dpdpkit-admin-$v.tar.gz -C <static dir>
-```
+archive root is the bundle itself (`index.html` at the top level). dpdpkit-fastapi and dpdpkit-django pin a version
+in their `admin-bundle.version` file and add that bundle to their wheels when they build a release.
 
 ## Status
 
-Placeholder shell only. Screens (overview, request queue, consent analytics, retention monitor, audit export,
-settings) are tracked as ADMIN-02.
+Screens: overview, request queue, consent analytics, retention monitor, incident register, audit export and
+settings. Settings shows the current notice and purposes read-only. Editing settings, webhooks, API keys, team
+roles, templated responses and failed-notification counts need backend support first and aren't here yet.
 
 Licensed under Apache-2.0.
