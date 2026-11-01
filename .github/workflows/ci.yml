@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]   # vitest 5 needs Node 22.12+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build to static files
+        run: npm run build
+      - name: Built index.html exists and uses relative asset URLs
+        run: |
+          test -f dist/index.html
+          ! grep -E '(src|href)="/' dist/index.html
+      - run: npm audit --audit-level=high --omit=dev
