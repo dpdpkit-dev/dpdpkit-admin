@@ -1,0 +1,59 @@
+# Release on tag vX.Y.Z: build the dashboard to static files and attach it to the GitHub release as
+# dpdpkit-admin-X.Y.Z.tar.gz (+ .sha256). The fastapi, django and server builds download that asset at
+# the release version (release-train order). package.json version must match the tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - id: v
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test "$(node -p 'require("./package.json").version')" = "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; else echo "pre=false" >> "$GITHUB_OUTPUT"; fi
+      - run: npm ci
+      - run: npm run typecheck && npm test && npm run build
+      - name: Package the bundle
+        run: |
+          ! grep -E '(src|href)="/' dist/index.html
+          name="dpdpkit-admin-${{ steps.v.outputs.version }}.tar.gz"
+          # Archive root is the bundle itself (index.html at top level), so consumers extract straight into their static dir.
+          tar -czf "$name" -C dist .
+          sha256sum "$name" > "$name.sha256"
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+      - name: Release notes
+        run: |
+          awk -v v="${{ steps.v.outputs.version }}" '
+            $0 ~ "^## " { if (found) exit; if (index($0, v)) { found=1; next } }
+            found { print }' CHANGELOG.md > notes.md
+          test -s notes.md || echo "See CHANGELOG.md" > notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: notes.md
+          prerelease: ${{ steps.v.outputs.pre == 'true' }}
+          files: |
+            dpdpkit-admin-${{ steps.v.outputs.version }}.tar.gz
+            dpdpkit-admin-${{ steps.v.outputs.version }}.tar.gz.sha256
+            sbom.spdx.json

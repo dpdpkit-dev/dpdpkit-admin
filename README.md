@@ -18,7 +18,21 @@ npm run build      # type-check, then static files in dist/
 ```
 
 `dist/` is plain static files with relative asset URLs, so any adapter can serve it from its own mount path
-(for example `/dpdp/admin/`). Publishing the bundle as an artifact for the adapters is tracked as ADMIN-04.
+(for example `/dpdp/admin/`).
+
+## Consume the bundle
+
+Each `vX.Y.Z` tag publishes `dpdpkit-admin-X.Y.Z.tar.gz` (with a `.sha256` file) on the GitHub release. The
+archive root is the bundle itself (`index.html` at the top level). The fastapi, django and server builds
+download the asset at the release version and extract it into their static directory:
+
+```bash
+v=0.4.0
+base=https://github.com/dpdpkit-dev/dpdpkit-admin/releases/download/v$v
+curl -fsSLO $base/dpdpkit-admin-$v.tar.gz -O $base/dpdpkit-admin-$v.tar.gz.sha256
+sha256sum -c dpdpkit-admin-$v.tar.gz.sha256
+mkdir -p <static dir> && tar -xzf dpdpkit-admin-$v.tar.gz -C <static dir>
+```
 
 ## Status
 
