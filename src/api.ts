@@ -28,6 +28,22 @@ export interface LedgerVerification {
   first_bad_index: number | null;
 }
 
+export interface Incident {
+  id: string;
+  title: string;
+  aware_at: string;
+  board_report_due: string;
+  cert_in_report_due?: string | null;
+  status?: string;
+}
+
+export interface IncidentCreate {
+  title: string;
+  aware_at: string;
+  description?: string;
+  affected_count?: number;
+}
+
 const BASE_KEY = "dpdpkit-admin:api-base";
 export const DEFAULT_API_BASE = "/dpdp";
 
@@ -49,6 +65,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function callText(path: string): Promise<string> {
+  const res = await fetch(`${getApiBase()}${path}`, { credentials: "same-origin" });
+  if (!res.ok) throw new Error(`${path} failed (${res.status})`);
+  return res.text();
+}
+
 export const api = {
   requests: () => call<DsrRequest[]>("/admin/requests"),
   closeRequest: (id: string) =>
@@ -60,5 +82,13 @@ export const api = {
   consentStats: () => call<ConsentStat[]>("/admin/consent/stats"),
   retention: () => call<RetentionItem[]>("/admin/retention/preview"),
   verifyLedger: () => call<LedgerVerification>("/admin/ledger/verify", { method: "POST" }),
+  incidents: async () => (await call<{ items: Incident[] }>("/admin/incidents")).items,
+  createIncident: (body: IncidentCreate) =>
+    call<Incident>("/admin/incidents", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  incidentReport: (id: string) => callText(`/admin/incidents/${encodeURIComponent(id)}/report`),
   auditExportUrl: () => `${getApiBase()}/admin/audit/export`,
 };

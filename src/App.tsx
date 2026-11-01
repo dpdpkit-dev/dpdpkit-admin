@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { AuditExport, ConsentAnalytics, Overview, RequestQueue, RetentionMonitor, Settings } from "./screens";
+import { AuditExport, ConsentAnalytics, IncidentRegister, Overview, RequestQueue, RetentionMonitor, Settings } from "./screens";
 
 const SCREENS = [
   { id: "overview", label: "Overview", View: Overview },
   { id: "requests", label: "Request queue", View: RequestQueue },
   { id: "consent", label: "Consent analytics", View: ConsentAnalytics },
   { id: "retention", label: "Retention monitor", View: RetentionMonitor },
+  { id: "incidents", label: "Incident register", View: IncidentRegister },
   { id: "audit", label: "Audit export", View: AuditExport },
   { id: "settings", label: "Settings", View: Settings },
 ] as const;

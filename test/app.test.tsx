@@ -21,7 +21,7 @@ function stubFetch(routes: Record<string, unknown>) {
   );
 }
 
-test("renders the shell with all six screens in the nav", () => {
+test("renders the shell with all seven screens in the nav", () => {
   stubFetch({ "/admin/requests": [], "/admin/retention/preview": [] });
   render(<App />);
   expect(screen.getByRole("heading", { name: "dpdpkit admin" })).toBeTruthy();
@@ -31,6 +31,7 @@ test("renders the shell with all six screens in the nav", () => {
     "Request queue",
     "Consent analytics",
     "Retention monitor",
+    "Incident register",
     "Audit export",
     "Settings",
   ]);
@@ -61,6 +62,32 @@ test("audit export verifies the ledger", async () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Verify ledger" }));
   expect(await screen.findByText(/12 entries intact/)).toBeTruthy();
+});
+
+test("incident register shows clocks and a draft report", async () => {
+  const soon = new Date(Date.now() + 5.5 * 3_600_000).toISOString();
+  const late = new Date(Date.now() - 2.5 * 3_600_000).toISOString();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url.endsWith("/report")
+        ? { ok: true, status: 200, text: async () => "# Draft breach report" }
+        : {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              items: [{ id: "i1", title: "Leaked bucket", aware_at: late, board_report_due: soon, cert_in_report_due: late }],
+            }),
+          },
+    ),
+  );
+  window.location.hash = "#/incidents";
+  render(<App />);
+  expect(await screen.findByText("Leaked bucket")).toBeTruthy();
+  expect(screen.getByText("5h left")).toBeTruthy();
+  expect(screen.getByText("overdue by 3h")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "View draft report i1" }));
+  expect(await screen.findByText("# Draft breach report")).toBeTruthy();
 });
 
 test("slaLabel formats days", () => {

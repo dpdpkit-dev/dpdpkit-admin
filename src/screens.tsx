@@ -173,6 +173,113 @@ export function RetentionMonitor() {
   );
 }
 
+const HOUR = 3_600_000;
+
+export function clockLabel(dueAt: string, now = Date.now()): string {
+  const hours = Math.floor((new Date(dueAt).getTime() - now) / HOUR);
+  if (hours < 0) return `overdue by ${-hours}h`;
+  return `${hours}h left`;
+}
+
+export function IncidentRegister() {
+  const state = useLoad(api.incidents);
+  const [title, setTitle] = useState("");
+  const [awareAt, setAwareAt] = useState("");
+  const [affected, setAffected] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ id: string; text: string } | null>(null);
+
+  const create = async () => {
+    try {
+      await api.createIncident({
+        title: title.trim(),
+        aware_at: new Date(awareAt).toISOString(),
+        ...(affected ? { affected_count: Number(affected) } : {}),
+      });
+      setTitle("");
+      setAwareAt("");
+      setAffected("");
+      setActionError(null);
+      state.reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const showDraft = async (id: string) => {
+    try {
+      setDraft({ id, text: await api.incidentReport(id) });
+      setActionError(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <section aria-labelledby="h-incidents">
+      <h2 id="h-incidents">Incident register</h2>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void create();
+        }}
+      >
+        <label>
+          Title <input required value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>{" "}
+        <label>
+          Aware at{" "}
+          <input type="datetime-local" required value={awareAt} onChange={(e) => setAwareAt(e.target.value)} />
+        </label>{" "}
+        <label>
+          Affected principals{" "}
+          <input type="number" min="0" value={affected} onChange={(e) => setAffected(e.target.value)} />
+        </label>{" "}
+        <button type="submit">Record incident</button>
+      </form>
+      {actionError && <p role="alert">{actionError}</p>}
+      <Status state={state}>
+        {(items) => (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Incident</th>
+                <th scope="col">Title</th>
+                <th scope="col">Status</th>
+                <th scope="col">Board report (72h)</th>
+                <th scope="col">CERT-In (6h)</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => (
+                <tr key={i.id}>
+                  <td>{i.id}</td>
+                  <td>{i.title}</td>
+                  <td>{i.status ?? "open"}</td>
+                  <td>{clockLabel(i.board_report_due)}</td>
+                  <td>{i.cert_in_report_due ? clockLabel(i.cert_in_report_due) : "—"}</td>
+                  <td>
+                    <button type="button" onClick={() => showDraft(i.id)}>
+                      View draft report {i.id}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Status>
+      {draft && (
+        <section aria-label={`Draft report ${draft.id}`}>
+          <h3>Draft report {draft.id}</h3>
+          <p>Draft only. dpdpkit never submits to the Board or CERT-In; send it yourself after review.</p>
+          <pre>{draft.text}</pre>
+        </section>
+      )}
+    </section>
+  );
+}
+
 export function AuditExport() {
   const [result, setResult] = useState<string | null>(null);
   const verify = async () => {
