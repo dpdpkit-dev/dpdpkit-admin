@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write      # build provenance
+      attestations: write  # build provenance
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -36,6 +38,9 @@ jobs:
           # Archive root is the bundle itself (index.html at top level), so consumers extract straight into their static dir.
           tar -czf "$name" -C dist .
           sha256sum "$name" > "$name.sha256"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dpdpkit-admin-${{ steps.v.outputs.version }}.tar.gz
       - name: SBOM
         uses: anchore/sbom-action@v0
         with:
