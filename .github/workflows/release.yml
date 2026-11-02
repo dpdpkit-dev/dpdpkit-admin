@@ -38,7 +38,7 @@ jobs:
           # Archive root is the bundle itself (index.html at top level), so consumers extract straight into their static dir.
           tar -czf "$name" -C dist .
           sha256sum "$name" > "$name.sha256"
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dpdpkit-admin-${{ steps.v.outputs.version }}.tar.gz
       - name: SBOM
