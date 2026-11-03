@@ -2,7 +2,9 @@
 
 All code packages in the dpdpkit release train share one version number.
 
-## 0.1.0-alpha.1
+## Unreleased
+
+## 0.1.0-alpha.2 - 2026-11-03
 
 ### Added
 - Screens: overview, request queue (assign, start, verify identity, respond, reject), consent analytics, retention

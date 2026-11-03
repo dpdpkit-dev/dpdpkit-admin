@@ -1,6 +1,6 @@
 {
   "name": "dpdpkit-admin",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "description": "dpdpkit admin dashboard: React + Vite app built to static files and bundled into the adapters and server image.",
   "license": "Apache-2.0",
